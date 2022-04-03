@@ -81,7 +81,7 @@ defmodule ExTablerIcons do
     with true <- File.exists?(path),
          {:ok, body} <- File.read(Path.join(path, "package.json")),
          {:ok, json} <- Jason.decode(body) do
-      {:ok, json.version}
+      {:ok, Map.get(json, "version")}
     else
       _ -> :error
     end
