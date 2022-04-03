@@ -1,4 +1,5 @@
 defmodule ExTablerIcons do
+  @tabler_icons_repo "https://github.com/tabler/tabler-icons.git"
   @latest_version "1.60.0"
 
   @moduledoc """
@@ -12,6 +13,7 @@ defmodule ExTablerIcons do
 
       config :ex_tabler_icons,
           version: "#{@latest_version}",
+          tabler_icons_repo: "https://github.com/tabler/tabler-icons.git",
           default: [
             cd: Path.expand("../assets", __DIR__),
             config_file: "tabler_icons.json",
@@ -39,23 +41,46 @@ defmodule ExTablerIcons do
       """)
     end
 
-    configured_version = configured_version()
+    verify_tabler_icons_repo()
+    verify_version()
 
-    case installed_version() do
-      {:ok, ^configured_version} ->
+    Supervisor.start_link([], strategy: :one_for_one)
+  end
+
+  @doc """
+  Returns the configured ex_tabler_icons version.
+  """
+  def configured_tabler_icons_repo do
+    Application.get_env(:ex_tabler_icons, :tabler_icons_repo, @tabler_icons_repo)
+  end
+
+  def installed_tabler_icons_repo do
+    path = tabler_icons_path()
+
+    if File.exists?(path) do
+      {repo, 0} = System.cmd("git", ["remote", "get-url", "origin"], cd: path)
+      {:ok, String.trim(repo)}
+    else
+      :error
+    end
+  end
+
+  defp verify_tabler_icons_repo() do
+    configured_repo = configured_tabler_icons_repo()
+
+    case installed_tabler_icons_repo() do
+      {:ok, ^configured_repo} ->
         :ok
 
-      {:ok, version} ->
+      {:ok, tabler_icons_repo} ->
         Logger.warn("""
-        Outdated ex_tabler_icons version. Expected #{configured_version}, got #{version}. \
-        Please run `mix ex_tabler_icons.install` or update the version in your config files.\
+        Outdated tabler icons repo. Expected #{configured_repo}, got #{tabler_icons_repo}. \
+        Please run `mix ex_tabler_icons.install` or update the `tabler_icons_repo` value in your config files.\
         """)
 
       :error ->
         :ok
     end
-
-    Supervisor.start_link([], strategy: :one_for_one)
   end
 
   @doc false
@@ -84,6 +109,24 @@ defmodule ExTablerIcons do
       {:ok, Map.get(json, "version")}
     else
       _ -> :error
+    end
+  end
+
+  defp verify_version() do
+    configured_version = configured_version()
+
+    case installed_version() do
+      {:ok, ^configured_version} ->
+        :ok
+
+      {:ok, version} ->
+        Logger.warn("""
+        Outdated ex_tabler_icons version. Expected #{configured_version}, got #{version}. \
+        Please run `mix ex_tabler_icons.install` or update the version in your config files.\
+        """)
+
+      :error ->
+        :ok
     end
   end
 
@@ -172,12 +215,15 @@ defmodule ExTablerIcons do
 
   def install do
     path = tabler_icons_path()
+    tabler_icons_repo = configured_tabler_icons_repo()
     version = configured_version()
 
-    unless File.exists?(path) do
+    if File.exists?(path) do
+      System.cmd("git", ["remote", "set-url", "origin", tabler_icons_repo], cd: path)
+    else
       vendor_dir = Path.expand("../vendor", __DIR__)
       File.mkdir_p!(vendor_dir)
-      System.cmd("git", ["clone", "https://github.com/tabler/tabler-icons.git"], cd: vendor_dir)
+      System.cmd("git", ["clone", tabler_icons_repo], cd: vendor_dir)
     end
 
     System.cmd("git", ["fetch", "--all", "--tags"], cd: path)
