@@ -1,6 +1,9 @@
 defmodule ExTablerIcons do
-  @tabler_icons_repo "https://github.com/tabler/tabler-icons.git"
   @latest_version "1.60.0"
+
+  @tabler_icons_repo "https://github.com/tabler/tabler-icons.git"
+  @tabler_icons_repo_remote "origin"
+  @tabler_icons_repo_main_branch "master"
 
   @moduledoc """
   Runner for [tabler-icons](https://github.com/tabler/tabler-icons).
@@ -26,6 +29,9 @@ defmodule ExTablerIcons do
             font_output: "../priv/static/fonts/",
             css_output: "css/"
           ]
+
+  You may also set `version` to `:main` if you wish to track the main branch on the
+  tabler icons repository.
   """
 
   use Application
@@ -58,8 +64,7 @@ defmodule ExTablerIcons do
     path = tabler_icons_path()
 
     if File.exists?(path) do
-      {repo, 0} = System.cmd("git", ["remote", "get-url", "origin"], cd: path)
-      {:ok, String.trim(repo)}
+      {:ok, run_simple_output_git_command(["remote", "get-url", @tabler_icons_repo_remote])}
     else
       :error
     end
@@ -113,17 +118,60 @@ defmodule ExTablerIcons do
   end
 
   defp verify_version() do
-    configured_version = configured_version()
+    case configured_version() do
+      :main ->
+        verify_main()
 
+      version_tag ->
+        verify_version_by_tag(version_tag)
+    end
+  end
+
+  defp verify_main() do
+    path = tabler_icons_path()
+
+    if File.exists?(path) do
+      System.cmd("git", ["fetch", @tabler_icons_repo_remote, @tabler_icons_repo_main_branch],
+        cd: path,
+        stderr_to_stdout: true
+      )
+
+      head_commit = run_simple_output_git_command(["rev-parse", "HEAD"])
+
+      origin_main_commit =
+        run_simple_output_git_command([
+          "rev-parse",
+          "#{@tabler_icons_repo_remote}/#{@tabler_icons_repo_main_branch}"
+        ])
+
+      case head_commit do
+        ^origin_main_commit ->
+          :ok
+
+        _ ->
+          Logger.warn("""
+          Outdated main commit. Please run `mix ex_tabler_icons.install`.\
+          """)
+
+          :error
+      end
+    else
+      :ok
+    end
+  end
+
+  defp verify_version_by_tag(configured_version_tag) do
     case installed_version() do
-      {:ok, ^configured_version} ->
+      {:ok, ^configured_version_tag} ->
         :ok
 
       {:ok, version} ->
         Logger.warn("""
-        Outdated ex_tabler_icons version. Expected #{configured_version}, got #{version}. \
+        Outdated ex_tabler_icons version. Expected #{configured_version_tag}, got #{version}. \
         Please run `mix ex_tabler_icons.install` or update the version in your config files.\
         """)
+
+        :error
 
       :error ->
         :ok
@@ -134,12 +182,7 @@ defmodule ExTablerIcons do
     Path.expand("../vendor/tabler-icons", __DIR__)
   end
 
-  @doc """
-  Returns the configuration for the given profile.
-
-  Returns nil if the profile does not exist.
-  """
-  def config_for!(profile) when is_atom(profile) do
+  defp config_for!(profile) when is_atom(profile) do
     Application.get_env(:ex_tabler_icons, profile) ||
       raise ArgumentError, """
       unknown ex_tabler_icons profile. Make sure the profile is defined in your config/config.exs file, such as:
@@ -166,9 +209,8 @@ defmodule ExTablerIcons do
     0
   end
 
-  def run(profile) when is_atom(profile) do
+  defp run(profile) when is_atom(profile) do
     config = config_for!(profile)
-
     path = tabler_icons_path()
 
     current_directory = config[:cd] || File.cwd!()
@@ -219,7 +261,9 @@ defmodule ExTablerIcons do
     version = configured_version()
 
     if File.exists?(path) do
-      System.cmd("git", ["remote", "set-url", "origin", tabler_icons_repo], cd: path)
+      System.cmd("git", ["remote", "set-url", @tabler_icons_repo_remote, tabler_icons_repo],
+        cd: path
+      )
     else
       vendor_dir = Path.expand("../vendor", __DIR__)
       File.mkdir_p!(vendor_dir)
@@ -227,8 +271,24 @@ defmodule ExTablerIcons do
     end
 
     System.cmd("git", ["fetch", "--all", "--tags"], cd: path)
-    System.cmd("git", ["checkout", "tags/v#{version}"], cd: path)
+
+    checkout_commit =
+      case version do
+        :main ->
+          "#{@tabler_icons_repo_remote}/#{@tabler_icons_repo_main_branch}"
+
+        version_tag ->
+          "tags/v#{version_tag}"
+      end
+
+    System.cmd("git", ["checkout", checkout_commit], cd: path, stderr_to_stdout: true)
 
     System.cmd("npm", ["install", "--legacy-peer-deps"], cd: path)
+  end
+
+  defp run_simple_output_git_command(command_parts) do
+    path = tabler_icons_path()
+    {output, 0} = System.cmd("git", command_parts, cd: path)
+    String.trim(output)
   end
 end
