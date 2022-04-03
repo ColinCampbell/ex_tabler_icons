@@ -41,32 +41,27 @@ defmodule ExTablerIcons do
   def start(_, _) do
     unless Application.get_env(:ex_tabler_icons, :version) do
       Logger.warn("""
-      ex_tabler_icons version is not configured. Please set it in your config files:
+      ex_tabler_icons version is not configured. Please set it in your config file:
 
           config :ex_tabler_icons, :version, "#{latest_version()}"
       """)
     end
 
-    verify_tabler_icons_repo()
-    verify_version()
-
     Supervisor.start_link([], strategy: :one_for_one)
   end
 
-  @doc """
-  Returns the configured ex_tabler_icons version.
-  """
-  def configured_tabler_icons_repo do
-    Application.get_env(:ex_tabler_icons, :tabler_icons_repo, @tabler_icons_repo)
-  end
+  def execute(profile) do
+    case {verify_tabler_icons_repo(), verify_version()} do
+      {:ok, :ok} ->
+        run(profile)
+        copy_files(profile)
+        :ok
 
-  def installed_tabler_icons_repo do
-    path = tabler_icons_path()
+      {:ok, error} ->
+        error
 
-    if File.exists?(path) do
-      {:ok, run_simple_output_git_command(["remote", "get-url", @tabler_icons_repo_remote])}
-    else
-      :error
+      {error, _} ->
+        error
     end
   end
 
@@ -80,11 +75,31 @@ defmodule ExTablerIcons do
       {:ok, tabler_icons_repo} ->
         Logger.warn("""
         Outdated tabler icons repo. Expected #{configured_repo}, got #{tabler_icons_repo}. \
-        Please run `mix ex_tabler_icons.install` or update the `tabler_icons_repo` value in your config files.\
+        Please run `mix ex_tabler_icons.install` or update the `tabler_icons_repo` value in your config file.\
         """)
 
+        :error
+
       :error ->
-        :ok
+        Logger.warn("""
+          Repostiory not found, installing...
+        """)
+
+        install()
+    end
+  end
+
+  defp configured_tabler_icons_repo do
+    Application.get_env(:ex_tabler_icons, :tabler_icons_repo, @tabler_icons_repo)
+  end
+
+  defp installed_tabler_icons_repo do
+    path = tabler_icons_path()
+
+    if File.exists?(path) do
+      {:ok, run_simple_output_git_command(["remote", "get-url", @tabler_icons_repo_remote])}
+    else
+      :error
     end
   end
 
@@ -99,64 +114,48 @@ defmodule ExTablerIcons do
     Application.get_env(:ex_tabler_icons, :version, latest_version())
   end
 
-  @doc """
-  Returns the version of the local tabler icons repository.
-
-  Returns `{:ok, version_string}` on success or `:error` when the repository
-  is not available.
-  """
-  def installed_version do
-    path = tabler_icons_path()
-
-    with true <- File.exists?(path),
-         {:ok, body} <- File.read(Path.join(path, "package.json")),
-         {:ok, json} <- Jason.decode(body) do
-      {:ok, Map.get(json, "version")}
-    else
-      _ -> :error
-    end
-  end
-
   defp verify_version() do
     case configured_version() do
       :main ->
         verify_main()
 
       version_tag ->
-        verify_version_by_tag(version_tag)
+        case {verify_version_by_tag(version_tag), verify_version_by_commit(version_tag)} do
+          {:ok, :ok} ->
+            :ok
+
+          {{:mismatched_version_error, configured_version_tag, version}, _} ->
+            Logger.warn("""
+            Outdated ex_tabler_icons version. Expected #{configured_version_tag}, got #{version}. \
+            Please run `mix ex_tabler_icons.install` or update the version in your config file.\
+            """)
+
+            :error
+
+          {:ok, :incorrect_commit_error} ->
+            Logger.warn("""
+            Tabler icons is not on the commit for v#{version_tag}. Please run `mix ex_tabler_icons.install`.\
+            """)
+
+            :error
+        end
     end
   end
 
   defp verify_main() do
-    path = tabler_icons_path()
+    case verify_on_commit(
+           "#{@tabler_icons_repo_remote}/#{@tabler_icons_repo_main_branch}",
+           @tabler_icons_repo_main_branch
+         ) do
+      true ->
+        :ok
 
-    if File.exists?(path) do
-      System.cmd("git", ["fetch", @tabler_icons_repo_remote, @tabler_icons_repo_main_branch],
-        cd: path,
-        stderr_to_stdout: true
-      )
+      false ->
+        Logger.warn("""
+        Outdated main commit. Please run `mix ex_tabler_icons.install`.\
+        """)
 
-      head_commit = run_simple_output_git_command(["rev-parse", "HEAD"])
-
-      origin_main_commit =
-        run_simple_output_git_command([
-          "rev-parse",
-          "#{@tabler_icons_repo_remote}/#{@tabler_icons_repo_main_branch}"
-        ])
-
-      case head_commit do
-        ^origin_main_commit ->
-          :ok
-
-        _ ->
-          Logger.warn("""
-          Outdated main commit. Please run `mix ex_tabler_icons.install`.\
-          """)
-
-          :error
-      end
-    else
-      :ok
+        :error
     end
   end
 
@@ -166,15 +165,37 @@ defmodule ExTablerIcons do
         :ok
 
       {:ok, version} ->
-        Logger.warn("""
-        Outdated ex_tabler_icons version. Expected #{configured_version_tag}, got #{version}. \
-        Please run `mix ex_tabler_icons.install` or update the version in your config files.\
-        """)
-
-        :error
+        {:mismatched_version_error, configured_version_tag, version}
 
       :error ->
         :ok
+    end
+  end
+
+  defp verify_version_by_commit(configured_version_tag) do
+    tag_reference = tag(configured_version_tag)
+
+    case verify_on_commit(
+           tag_reference,
+           "+refs/#{tag_reference}:refs/#{tag_reference}"
+         ) do
+      true ->
+        :ok
+
+      false ->
+        :incorrect_commit_error
+    end
+  end
+
+  defp installed_version do
+    path = tabler_icons_path()
+
+    with true <- File.exists?(path),
+         {:ok, body} <- File.read(Path.join(path, "package.json")),
+         {:ok, json} <- Jason.decode(body) do
+      {:ok, Map.get(json, "version")}
+    else
+      _ -> :error
     end
   end
 
@@ -196,17 +217,6 @@ defmodule ExTablerIcons do
               css_output: "css/"
             ]
       """
-  end
-
-  def execute(profile) do
-    unless File.exists?(tabler_icons_path()) do
-      install()
-    end
-
-    run(profile)
-    copy_files(profile)
-
-    0
   end
 
   defp run(profile) when is_atom(profile) do
@@ -270,25 +280,58 @@ defmodule ExTablerIcons do
       System.cmd("git", ["clone", tabler_icons_repo], cd: vendor_dir)
     end
 
-    System.cmd("git", ["fetch", "--all", "--tags"], cd: path)
-
     checkout_commit =
       case version do
         :main ->
+          fetch(path, @tabler_icons_repo_main_branch)
           "#{@tabler_icons_repo_remote}/#{@tabler_icons_repo_main_branch}"
 
         version_tag ->
+          fetch(path, "+refs/#{tag(version_tag)}:refs/#{tag(version_tag)}")
           "tags/v#{version_tag}"
       end
 
     System.cmd("git", ["checkout", checkout_commit], cd: path, stderr_to_stdout: true)
 
     System.cmd("npm", ["install", "--legacy-peer-deps"], cd: path)
+
+    :ok
+  end
+
+  defp verify_on_commit(reference, remote_reference) do
+    path = tabler_icons_path()
+
+    fetch(path, remote_reference)
+
+    current_commit = commit_hash("HEAD")
+    referenced_commit = commit_hash(reference)
+
+    current_commit == referenced_commit
+  end
+
+  defp commit_hash(reference) do
+    run_simple_output_git_command([
+      "rev-list",
+      "-n",
+      "1",
+      reference
+    ])
   end
 
   defp run_simple_output_git_command(command_parts) do
     path = tabler_icons_path()
     {output, 0} = System.cmd("git", command_parts, cd: path)
     String.trim(output)
+  end
+
+  defp fetch(path, ref) do
+    System.cmd("git", ["fetch", @tabler_icons_repo_remote, ref],
+      cd: path,
+      stderr_to_stdout: true
+    )
+  end
+
+  defp tag(version) do
+    "tags/v#{version}"
   end
 end

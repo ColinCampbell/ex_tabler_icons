@@ -42,11 +42,11 @@ defmodule Mix.Tasks.ExTablerIcons do
 
   defp run_tabler_icons([profile]) do
     case ExTablerIcons.execute(String.to_atom(profile)) do
-      0 ->
+      :ok ->
         :ok
 
-      status ->
-        Mix.raise("`mix ex_tabler_icons` exited with #{status}")
+      :error ->
+        Mix.raise("`mix ex_tabler_icons` exited with an error")
         :error
     end
   end
