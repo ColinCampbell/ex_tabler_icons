@@ -1,5 +1,5 @@
 defmodule ExTablerIcons do
-  @latest_version "1.50.0"
+  @latest_version "1.60.0"
 
   @moduledoc """
   Runner for [tabler-icons](https://github.com/tabler/tabler-icons).
