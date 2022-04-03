@@ -10,7 +10,6 @@ defmodule TablerIcons.MixProject do
       name: "ExTablerIcons",
       version: @version,
       elixir: "~> 1.13",
-      start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: description(),
       package: package(),
@@ -21,7 +20,9 @@ defmodule TablerIcons.MixProject do
 
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger],
+      mod: {ExTablerIcons, []},
+      env: [default: []]
     ]
   end
 

@@ -33,7 +33,7 @@ defmodule Mix.Tasks.ExTablerIcons do
     if opts[:runtime_config] do
       Mix.Task.run("app.config")
     else
-      Application.ensure_all_started(:tabler_icons)
+      Application.ensure_all_started(:ex_tabler_icons)
     end
 
     Mix.Task.reenable("ex_tabler_icons")
