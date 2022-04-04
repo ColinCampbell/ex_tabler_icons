@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 (04.04.2022)
+
+- Fix for cloning the tabler icons repository into the correct path
+
 ## 0.2.0 (03.04.2022)
 
 - Upgrade default tabler_icons version to v1.60.0
