@@ -8,13 +8,13 @@ into Elixir apps.
 Add the `:ex_tabler_icons` dependency to your `mix.exs` file:
 
 ```
-{:ex_tabler_icons, "~> 0.1", runtime: Mix.env() == :dev}
+{:ex_tabler_icons, "~> 0.2", runtime: Mix.env() == :dev}
 ```
 
 You can define `ex_tabler_icons` profiles in your `config/config.exs` file:
 
     config :ex_tabler_icons,
-        version: "1.50.0",
+        version: "1.60.0",
         default: [
           cd: Path.expand("../assets", __DIR__),
           config_file: "tabler_icons.json",
