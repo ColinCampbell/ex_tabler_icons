@@ -51,11 +51,12 @@ defmodule ExTablerIcons do
     TablerIconsRepo.install(tabler_icons_path())
   end
 
-  def execute(profile) do
+  def execute(profile) when is_atom(profile) do
     case TablerIconsRepo.verify(tabler_icons_path()) do
       :ok ->
         run(profile)
         copy_files(profile)
+        clean_files()
 
         :ok
 
@@ -115,7 +116,7 @@ defmodule ExTablerIcons do
       """
   end
 
-  defp run(profile) when is_atom(profile) do
+  defp run(profile) do
     config = config_for!(profile)
     path = tabler_icons_path()
 
@@ -159,5 +160,15 @@ defmodule ExTablerIcons do
     end
 
     :ok
+  end
+
+  def clean_files() do
+    path = tabler_icons_path()
+
+    TablerIconsRepo.restore_files(path, [
+      Path.join([".build", "iconfont-unicode.json"]),
+      "iconfont",
+      "tags.json"
+    ])
   end
 end

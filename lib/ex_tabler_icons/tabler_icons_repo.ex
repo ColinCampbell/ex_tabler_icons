@@ -35,6 +35,10 @@ defmodule ExTablerIcons.TablerIconsRepo do
     :ok
   end
 
+  def restore_files(path, files) do
+    System.cmd("git", ["restore"] ++ files, cd: path)
+  end
+
   defp configured_tabler_icons_repo do
     Application.get_env(:ex_tabler_icons, :tabler_icons_repo, @url)
   end
