@@ -12,9 +12,8 @@ defmodule ExTablerIcons.TablerIconsRepo do
     if File.exists?(path) do
       System.cmd("git", ["remote", "set-url", @remote, tabler_icons_repo], cd: path)
     else
-      vendor_dir = Path.expand("../vendor", __DIR__)
-      File.mkdir_p!(vendor_dir)
-      System.cmd("git", ["clone", tabler_icons_repo], cd: vendor_dir)
+      File.mkdir_p!(path)
+      System.cmd("git", ["clone", tabler_icons_repo, "."], cd: path)
     end
 
     checkout_commit =
@@ -29,7 +28,6 @@ defmodule ExTablerIcons.TablerIconsRepo do
       end
 
     System.cmd("git", ["checkout", checkout_commit], cd: path, stderr_to_stdout: true)
-
     System.cmd("npm", ["install", "--legacy-peer-deps"], cd: path)
 
     :ok
